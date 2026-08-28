@@ -194,6 +194,16 @@ select.finput{-webkit-appearance:none;appearance:none}
 .order-note b{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.4px;color:var(--gold);margin-bottom:4px}
 .order-done{min-height:44px;padding:10px 14px;border-radius:12px;background:var(--green);color:#fff;font-weight:600;font-size:14px;margin-top:12px;width:100%;display:flex;align-items:center;justify-content:center;gap:8px}
 
+/* Modal de confirmación (alerta nativa iOS) */
+.confirm-overlay{position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:100000;display:flex;align-items:center;justify-content:center;padding:16px}
+.confirm-card{width:min(320px,100%);background:var(--bg);border-radius:14px;padding:20px;text-align:center;box-shadow:0 20px 50px rgba(0,0,0,.3)}
+.confirm-card h3{font-family:"Playfair Display",Georgia,serif;font-size:17px;margin-bottom:8px}
+.confirm-sub{font-size:13px;color:var(--muted);margin-bottom:18px;line-height:1.5}
+.confirm-actions{display:flex;flex-direction:column;gap:8px}
+.confirm-actions .btn-cancel,.confirm-actions .btn-confirm{min-height:44px;border-radius:12px;font-size:16px;font-weight:600;cursor:pointer;width:100%}
+.confirm-actions .btn-cancel{background:var(--card);color:var(--text);border:1px solid var(--border)}
+.confirm-actions .btn-confirm{background:var(--wine);color:#fff;border:none}
+
 /* Bottom sheet */
 .backdrop{position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:100;opacity:0;visibility:hidden;transition:opacity .3s}
 .backdrop.show{opacity:1;visibility:visible}
@@ -423,6 +433,7 @@ function logout(){localStorage.removeItem(SESSION_KEY);location.reload()}
 function enterDashboard(){
   session=getSession();
   if(!session)return;
+  session.local=getLocal(session.user.idLocal);
   hide("login");show("dashboard");
   renderProfile();renderCatalog();renderCoupons();renderPedidos();
   cargarPedidosDesdeWix();
@@ -451,21 +462,20 @@ function stopQr(){
 /* ---------- Dashboard / perfil ---------- */
 function renderProfile(){
   var id=session.user.idLocal;
-  var l=getLocal(id),ov=profileOverrides(id);
-  var nombre=l.nombre||("Local "+id);
-  var giro=ov.giro||l.giro||l.categoria||"";
-  var horario=ov.horario||l.horario||"";
+  var l=session.local||getLocal(id),ov=profileOverrides(id);
+  var nombre=ov.nombre||l.nombre||("Local "+id);
+  var giro=ov.giro||l.giro||l.categoria||("Local #"+id);
+  var horario=ov.horario||l.horario||"Lun–Dom 6:00 am – 6:00 pm";
   var tel=ov.contacto||l.contacto||"";
   var wa=ov.whatsapp||l.whatsappDisplay||"";
-  var logo=l.logo||l.foto||"";
   $("#profile").innerHTML="";
   $("#profile").append(
     el("div",{className:"logo",html:(window.generarLogoMexicanoSVG?window.generarLogoMexicanoSVG(id,giro):"")}),
     el("div",null,[
       el("h2",{text:nombre}),
       el("div",{className:"badges"},[
-        giro?el("span",{className:"badge",html:'<i class="fa-solid fa-store"></i> '+giro}):null,
-        horario?el("span",{className:"badge",html:'<i class="fa-regular fa-clock"></i> '+horario}):null,
+        el("span",{className:"badge",html:'<i class="fa-solid fa-store"></i> '+giro}),
+        el("span",{className:"badge",html:'<i class="fa-regular fa-clock"></i> '+horario}),
         tel?el("span",{className:"badge",html:'<i class="fa-solid fa-phone"></i> '+tel}):null,
         wa?el("span",{className:"badge",html:'<i class="fa-brands fa-whatsapp"></i> '+wa}):null
       ].filter(Boolean))
@@ -622,13 +632,23 @@ function money(n){return "$"+Number(n||0).toFixed(2)}
 function renderPedidos(ps){
   var list=$("#pedidosList");if(!list)return;
   if(ps===undefined)ps=getMisPedidos();
-  var c=$("#pedidosCount");if(c)c.textContent=ps.length;
+  var id=session.user.idLocal;
   list.innerHTML="";
-  if(!ps.length){list.appendChild(el("p",{text:"No tienes pedidos pendientes.",style:"color:var(--muted);font-size:14px"}));return}
-  ps.forEach(function(o){
+  var vistos=new Set();
+  var items=[];
+  (ps||[]).forEach(function(o){
+    var key=o._id||o.idPedido;
+    if(key&&vistos.has(key))return;
+    if(key)vistos.add(key);
+    items.push(o);
+  });
+  var c=$("#pedidosCount");if(c)c.textContent=items.length;
+  if(!items.length){list.appendChild(el("p",{text:"No tienes pedidos pendientes.",style:"color:var(--muted);font-size:14px"}));return}
+  items.forEach(function(o,idx){
+    var folio=(Number(o.idLocal)||id)+"_"+String(idx+1).padStart(6,"0");
     var card=el("div",{className:"order-card"},[
       el("div",{className:"order-head"},[
-        el("div",null,[el("div",{className:"oid",text:o.idPedido}),el("div",{className:"hora",text:o.horaSolicitud||o.hora})])
+        el("div",null,[el("div",{className:"oid",text:folio}),el("div",{className:"hora",text:o.horaSolicitud||o.hora||""})])
       ]),
       el("div",{className:"order-items"},(o.productos||[]).map(function(p){
         var sub=p.subtotal!=null?p.subtotal:(Number(p.precio)*(Number(p.cantidad)||1));
@@ -636,13 +656,31 @@ function renderPedidos(ps){
       })),
       el("div",{className:"order-total",text:"Total: "+money(o.total)}),
       o.observaciones?el("div",{className:"order-note",html:"<b>Observaciones</b>"+o.observaciones}):null,
-      el("button",{className:"order-done",onclick:function(){marcarEntregado(o.idPedido,card)}},[el("i",{className:"fa-solid fa-check"}),"Marcar como Entregado"])
+      el("button",{className:"order-done",onclick:function(){pedirConfirmarEntrega(o,card)}},[el("i",{className:"fa-solid fa-check"}),"Marcar como Entregado"])
     ].filter(Boolean));
     list.appendChild(card);
   });
 }
-function marcarEntregado(idPedido,card){
-  var all=getPedidos().filter(function(o){return o.idPedido!==idPedido});
+function pedirConfirmarEntrega(o,card){
+  var root=document.getElementById("confirm-root");
+  if(!root){root=document.createElement("div");root.id="confirm-root";document.body.appendChild(root)}
+  root.innerHTML="";
+  var overlay=el("div",{className:"confirm-overlay"});
+  overlay.addEventListener("click",function(e){if(e.target===overlay)root.innerHTML=""});
+  var box=el("div",{className:"confirm-card"},[
+    el("h3",{text:"¿Confirmas la entrega de este pedido?"}),
+    el("p",{className:"confirm-sub",text:"Esta acción marcará la orden como completada y la removerá de tu panel permanentemente."}),
+    el("div",{className:"confirm-actions"},[
+      el("button",{className:"btn-cancel",onclick:function(){root.innerHTML=""}},[el("span",{text:"Cancelar"})]),
+      el("button",{className:"btn-confirm",onclick:function(){root.innerHTML="";marcarEntregado(o,card)}},[el("span",{text:"Confirmar Entrega"})])
+    ])
+  ]);
+  overlay.appendChild(box);
+  root.appendChild(overlay);
+}
+function marcarEntregado(o,card){
+  var key=o._id||o.idPedido;
+  var all=getPedidos().filter(function(x){return (x._id||x.idPedido)!==key});
   localStorage.setItem(PEDIDOS_KEY,JSON.stringify(all));
   card.classList.add("fade");
   setTimeout(function(){renderPedidos()},300);
