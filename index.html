@@ -100,6 +100,9 @@ a{color:inherit;text-decoration:none}
   backdrop-filter:saturate(180%) blur(20px);-webkit-backdrop-filter:saturate(180%) blur(20px);
 }
 .topbar h1{font-size:20px}
+.topbar-actions{display:flex;align-items:center;gap:12px}
+.logout-btn{display:inline-flex;align-items:center;gap:6px;min-height:44px;padding:0 14px;border-radius:999px;background:var(--red);color:#fff;font-size:14px;font-weight:600}
+.logout-btn i{font-size:14px}
 .toggle{display:inline-flex;align-items:center;gap:8px;font-size:14px;color:var(--muted);min-height:44px}
 .switch{position:relative;width:51px;height:31px;border-radius:999px;background:#E9E9EB;transition:background .3s}
 .switch::after{content:"";position:absolute;top:2px;left:2px;width:27px;height:27px;border-radius:50%;background:#fff;box-shadow:0 3px 8px rgba(0,0,0,.15);transition:transform .3s}
@@ -218,10 +221,13 @@ select.finput{-webkit-appearance:none;appearance:none}
 <body>
 <div class="topbar">
   <h1>Garmendia <span style="color:var(--gold)">Locatarios</span></h1>
-  <button class="toggle" id="darkToggle" aria-label="Modo oscuro">
-    <span id="darkLabel">Claro</span>
-    <span class="switch"></span>
-  </button>
+  <div class="topbar-actions">
+    <button class="toggle" id="darkToggle" aria-label="Modo oscuro">
+      <span id="darkLabel">Claro</span>
+      <span class="switch"></span>
+    </button>
+    <button class="logout-btn hidden" id="logoutBtn" aria-label="Salir"><i class="fa-solid fa-right-from-bracket"></i><span>Salir</span></button>
+  </div>
 </div>
 
 <!-- LOGIN -->
@@ -270,12 +276,12 @@ select.finput{-webkit-appearance:none;appearance:none}
     <button class="acc-head"><span class="acc-title"><span class="ic"><i class="fa-solid fa-ticket"></i></span> Cupones de Descuento</span><i class="fa-solid fa-chevron-down"></i></button>
     <div class="acc-body">
       <div id="couponForm" style="display:grid;gap:10px;margin-bottom:16px">
-        <div class="grid1"><div><span class="flabel">Código</span><input class="finput" id="cupCodigo" type="text" placeholder="MG-001-10PCT"/></div></div>
-        <div class="grid2">
-          <div><span class="flabel">% Descuento</span><input class="finput" id="cupDescuento" type="number" min="1" max="100" placeholder="10"/></div>
+        <div class="grid1">
+          <div><span class="flabel">Promoción</span><input class="finput" id="cupCodigo" type="text" maxlength="20" placeholder="50% descuento - 3 x 1 - $12 kg Cebolla"/></div>
+          <div><span class="flabel">Detalles</span><input class="finput" id="cupDetalles" type="text" maxlength="50" placeholder="Descripción corta"/></div>
           <div><span class="flabel">Vigencia</span><input class="finput" id="cupVigencia" type="date"/></div>
         </div>
-        <button class="btn btn-gold" id="addCouponBtn"><i class="fa-solid fa-plus"></i> Crear cupón</button>
+        <button class="btn btn-gold" id="addCouponBtn"><i class="fa-solid fa-plus"></i> Crear Cupón</button>
       </div>
       <div id="couponList"></div>
     </div>
@@ -429,15 +435,24 @@ function loginWithCredentials(user,pass){
   loginById(u.idLocal);
 }
 function logout(){localStorage.removeItem(SESSION_KEY);location.reload()}
+function cerrarSesion(){
+  localStorage.removeItem(SESSION_KEY);
+  if(window.__pedidosTimer){clearInterval(window.__pedidosTimer);window.__pedidosTimer=null}
+  session=null;
+  var u=$("#user"),p=$("#pass");if(u)u.value="";if(p)p.value="";
+  $("#profile").innerHTML="";
+  hide("dashboard");hide("logoutBtn");show("login");
+}
 
 function enterDashboard(){
   session=getSession();
   if(!session)return;
   session.local=getLocal(session.user.idLocal);
-  hide("login");show("dashboard");
+  hide("login");show("dashboard");show("logoutBtn");
+  depurarCupones();
   renderProfile();renderCatalog();renderCoupons();renderPedidos();
   cargarPedidosDesdeWix();
-  if(!window.__pedidosPoll){window.__pedidosPoll=true;setInterval(cargarPedidosDesdeWix,30000)}
+  if(!window.__pedidosTimer){window.__pedidosTimer=setInterval(cargarPedidosDesdeWix,30000)}
 }
 
 /* ---------- QR ---------- */
@@ -604,18 +619,28 @@ function renderCoupons(){
   if(!cs.length){list.appendChild(el("p",{text:"Sin cupones creados.",style:"color:var(--muted);font-size:14px"}));return}
   cs.forEach(function(c){
     list.appendChild(el("div",{className:"coupon"},[
-      el("div",null,[el("div",{className:"code",text:c.codigo}),el("div",{className:"meta",text:(c.descuento+"% dto. · vigencia "+c.vigencia)})]),
+      el("div",null,[el("div",{className:"code",text:c.codigo}),el("div",{className:"meta",text:(c.detalles||"")+" · vigencia "+(c.vigencia||"")})]),
       el("button",{className:"del",onclick:function(){delCoupon(c.id)}},[el("i",{className:"fa-regular fa-trash-can"})])
     ]));
   });
 }
-function addCoupon(codigo,descuento,vigencia){
+function addCoupon(codigo,detalles,vigencia){
   if(!codigo){alert("Escribe un código.");return}
   var id=session.user.idLocal;var cs=getCoupons(id);
-  cs.push({id:uid(),codigo:codigo,descuento:descuento,vigencia:vigencia});
+  if(cs.length>=3){alert("Límite alcanzado. Debes eliminar un cupón activo para poder registrar uno nuevo.");return}
+  cs.push({id:uid(),codigo:codigo,detalles:detalles,vigencia:vigencia,creado:new Date().toISOString()});
   save(CUP_PREFIX+id,cs);
   enviarActualizacionAWix({tipo:"cupon.alta",localId:id,cupon:cs[cs.length-1]});
   renderCoupons();
+}
+function depurarCupones(){
+  var id=session.user.idLocal;
+  var cs=getCoupons(id).filter(function(c){
+    var f=new Date(c.creado);
+    if(isNaN(f.getTime()))return true;
+    return (Date.now()-f.getTime()) < (8*24*60*60*1000);
+  });
+  save(CUP_PREFIX+id,cs);
 }
 function delCoupon(cid){
   var id=session.user.idLocal;var cs=getCoupons(id).filter(function(x){return x.id!==cid});
@@ -754,7 +779,8 @@ $("#saveProductBtn").addEventListener("click",function(){
   closeSheets();
   $("#pNombre").value="";$("#pPrecio").value="";$("#pNotas").value="";
 });
-$("#addCouponBtn").addEventListener("click",function(){addCoupon($("#cupCodigo").value.trim(),$("#cupDescuento").value,$("#cupVigencia").value);$("#cupCodigo").value="";$("#cupDescuento").value="";$("#cupVigencia").value=""});
+$("#addCouponBtn").addEventListener("click",function(){addCoupon($("#cupCodigo").value.trim(),$("#cupDetalles").value.trim(),$("#cupVigencia").value);$("#cupCodigo").value="";$("#cupDetalles").value="";$("#cupVigencia").value=""});
+$("#logoutBtn").addEventListener("click",cerrarSesion);
 $("#saveProfileBtn").addEventListener("click",function(){
   var id=session.user.idLocal;
   var ov={responsable:$("#eResponsable").value,contacto:$("#eContacto").value,whatsapp:$("#eWhatsapp").value,horario:$("#eHorario").value,giro:$("#eGiro").value};
