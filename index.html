@@ -750,10 +750,11 @@ function marcarEntregado(o,card){
 }
 
 /* ---------- Conexión API Wix ---------- */
-var WIX_GET_PEDIDOS="https://ebenezeraviation.com/_functions/obtenerPedidos";
-var WIX_UPDATE_INVENTARIO="https://ebenezeraviation.com/_functions/actualizarInventario";
-var WIX_GUARDAR_CUPON="https://ebenezeraviation.com/_functions/guardarCupon";
-var WIX_ELIMINAR_CUPON="https://ebenezeraviation.com/_functions/eliminarCupon";
+var WIX_BASE_URL="https://ebenezeraviation.com";
+var WIX_GET_PEDIDOS=WIX_BASE_URL+"/_functions/obtenerPedidos";
+var WIX_UPDATE_INVENTARIO=WIX_BASE_URL+"/_functions/actualizarInventario";
+var WIX_GUARDAR_CUPON=WIX_BASE_URL+"/_functions/guardarCupon";
+var WIX_ELIMINAR_CUPON=WIX_BASE_URL+"/_functions/eliminarCupon";
 
 async function cargarPedidosDesdeWix(){
   if(!session)return;
