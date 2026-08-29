@@ -689,11 +689,13 @@ function money(n){return "$"+Number(n||0).toFixed(2)}
 function renderPedidos(ps){
   var list=$("#pedidosList");if(!list)return;
   if(ps===undefined)ps=getMisPedidos();
+  if(typeof ps==="string"){try{ps=JSON.parse(ps)}catch(e){ps=[]}}
+  var listaPedidos=Array.isArray(ps)?ps:((ps&&Array.isArray(ps.pedidos))?ps.pedidos:[]);
   var id=session.user.idLocal;
   list.innerHTML="";
   var vistos=new Set();
   var items=[];
-  (ps||[]).forEach(function(o){
+  listaPedidos.forEach(function(o){
     var key=o._id||o.idPedido;
     if(key&&vistos.has(key))return;
     if(key)vistos.add(key);
