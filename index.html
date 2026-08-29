@@ -758,13 +758,13 @@ var WIX_GUARDAR_CUPON=WIX_BASE_URL+"/_functions/guardarCupon";
 var WIX_ELIMINAR_CUPON=WIX_BASE_URL+"/_functions/eliminarCupon";
 
 async function cargarPedidosDesdeWix(){
-  if(!session)return;
-  var id=session.user.idLocal;
+  var idLocal=(session&&session.user)?session.user.idLocal:null;
+  if(!idLocal)return;
   try{
-    var res=await fetch(WIX_GET_PEDIDOS+"?idLocal="+id);
-    var data=await res.json().catch(function(){return {}});
-    if(data&&Array.isArray(data.pedidos)){renderPedidos(data.pedidos)}
-  }catch(e){/* sin conexión: se conserva el listado local */}
+    var response=await fetch(WIX_GET_PEDIDOS+"?idLocal="+idLocal,{method:"GET",mode:"cors",headers:{"Content-Type":"application/json"}});
+    var data=await response.json().catch(function(){return {}});
+    if(response.ok&&data.status==="success"&&Array.isArray(data.pedidos)){renderPedidos(data.pedidos)}
+  }catch(error){console.error("Error al consultar pedidos pendientes en Wix:",error)}
 }
 
 function mostrarSincronizando(on){
