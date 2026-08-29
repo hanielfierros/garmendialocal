@@ -709,12 +709,15 @@ function renderPedidos(ps){
   }
   if(!items.length){list.appendChild(el("p",{text:"No tienes pedidos pendientes.",style:"color:var(--muted);font-size:14px"}));return}
   items.forEach(function(o,idx){
+    var listaProductos=[];
+    if(typeof o.productos==="string"){try{listaProductos=JSON.parse(o.productos)}catch(e){console.error("Error al desempaquetar el JSON de productos:",e);listaProductos=[]}}
+    else if(Array.isArray(o.productos)){listaProductos=o.productos}
     var folio=(Number(o.idLocal)||id)+"_"+String(idx+1).padStart(6,"0");
     var card=el("div",{className:"order-card"},[
       el("div",{className:"order-head"},[
         el("div",null,[el("div",{className:"oid",text:folio}),el("div",{className:"hora",text:o.horaSolicitud||o.hora||""})])
       ]),
-      el("div",{className:"order-items"},(o.productos||[]).map(function(p){
+      el("div",{className:"order-items"},(listaProductos||[]).map(function(p){
         var sub=p.subtotal!=null?p.subtotal:(Number(p.precio)*(Number(p.cantidad)||1));
         return el("div",{className:"line"},[el("span",{text:p.nombre+" × "+p.cantidad}),el("span",{text:money(sub)})]);
       })),
