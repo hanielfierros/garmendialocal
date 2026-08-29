@@ -619,18 +619,40 @@ function renderCoupons(){
   if(!cs.length){list.appendChild(el("p",{text:"Sin cupones creados.",style:"color:var(--muted);font-size:14px"}));return}
   cs.forEach(function(c){
     list.appendChild(el("div",{className:"coupon"},[
-      el("div",null,[el("div",{className:"code",text:c.codigo}),el("div",{className:"meta",text:(c.detalles||"")+" · vigencia "+(c.vigencia||"")})]),
-      el("button",{className:"del",onclick:function(){delCoupon(c.id)}},[el("i",{className:"fa-regular fa-trash-can"})])
+      el("div",null,[
+        el("div",{className:"code",text:c.titulo||"Promoción"}),
+        el("div",{className:"meta",text:(c.subtitulo||c.detalles||"")}),
+        el("div",{className:"meta",text:(c.codigo||"")+" · vigencia "+(c.vigencia||"")})
+      ]),
+      el("button",{className:"del",onclick:function(){delCoupon(c.id,c.codigo)}},[el("i",{className:"fa-regular fa-trash-can"})])
     ]));
   });
 }
-function addCoupon(codigo,detalles,vigencia){
-  if(!codigo){alert("Escribe un código.");return}
-  var id=session.user.idLocal;var cs=getCoupons(id);
+function genCodigoCupon(idLocal){
+  var suf="",chars="ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  for(var i=0;i<4;i++){suf+=chars.charAt(Math.floor(Math.random()*chars.length))}
+  return "MG-"+String(idLocal).padStart(3,"0")+"-"+suf;
+}
+function zonaFormateada(z){
+  return String(z||"zona").split("-").map(function(p){return p.charAt(0).toUpperCase()+p.slice(1)}).join(" ");
+}
+function localLabelActual(){
+  var m=(session.local&&session.local.mapa)||{};
+  var plano=m.planoLabel||"";
+  var z=zonaFormateada(m.zona);
+  return plano?("Local "+plano+" — "+z):("Local "+z);
+}
+function addCoupon(titulo,detalles,vigencia){
+  if(!titulo){alert("Escribe una promoción.");return}
+  var id=Number(session.user.idLocal);
+  var cs=getCoupons(id);
   if(cs.length>=3){alert("Límite alcanzado. Debes eliminar un cupón activo para poder registrar uno nuevo.");return}
-  cs.push({id:uid(),codigo:codigo,detalles:detalles,vigencia:vigencia,creado:new Date().toISOString()});
+  var codigo=genCodigoCupon(id);
+  var cupon={id:uid(),titulo:titulo,subtitulo:detalles,vigencia:vigencia,codigo:codigo,creado:new Date().toISOString()};
+  cs.push(cupon);
   save(CUP_PREFIX+id,cs);
-  enviarActualizacionAWix({tipo:"cupon.alta",localId:id,cupon:cs[cs.length-1]});
+  var payload={idLocal:id,negocio:(session.local&&session.local.nombre)||("Local "+id),localLabel:localLabelActual(),titulo:titulo,subtitulo:detalles,vigencia:vigencia,codigo:codigo};
+  fetch(WIX_GUARDAR_CUPON,{method:"POST",mode:"cors",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)}).catch(function(){});
   renderCoupons();
 }
 function depurarCupones(){
@@ -638,14 +660,14 @@ function depurarCupones(){
   var cs=getCoupons(id).filter(function(c){
     var f=new Date(c.creado);
     if(isNaN(f.getTime()))return true;
-    return (Date.now()-f.getTime()) < (8*24*60*60*1000);
+    return (Date.now()-f.getTime()) < (36*60*60*1000);
   });
   save(CUP_PREFIX+id,cs);
 }
-function delCoupon(cid){
+function delCoupon(cid,codigo){
   var id=session.user.idLocal;var cs=getCoupons(id).filter(function(x){return x.id!==cid});
   save(CUP_PREFIX+id,cs);
-  enviarActualizacionAWix({tipo:"cupon.baja",localId:id,cuponId:cid});
+  if(codigo){fetch(WIX_ELIMINAR_CUPON,{method:"POST",mode:"cors",headers:{"Content-Type":"application/json"},body:JSON.stringify({codigo:codigo})}).catch(function(){})}
   renderCoupons();
 }
 
@@ -730,6 +752,8 @@ function marcarEntregado(o,card){
 /* ---------- Conexión API Wix ---------- */
 var WIX_GET_PEDIDOS="https://ebenezeraviation.com";
 var WIX_UPDATE_INVENTARIO="https://ebenezeraviation.com";
+var WIX_GUARDAR_CUPON="https://ebenezeraviation.com/_functions/guardarCupon";
+var WIX_ELIMINAR_CUPON="https://ebenezeraviation.com/_functions/eliminarCupon";
 
 async function cargarPedidosDesdeWix(){
   if(!session)return;
